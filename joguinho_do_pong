@@ -1,0 +1,453 @@
+/*
+##########################################################################################################################
+Jogo Pong utilizando C
+Este código foi desenvolvido por Thiago Junio Saraiva e Jeferson Henrique Pereira
+##########################################################################################################################
+*/
+#include <windows.h>
+#include <GL/freeglut.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <conio.h>
+#include <sstream>
+#include <string>
+#include <string.h>
+//#include <vector>
+#include <iostream>
+#include <winable.h>
+
+//PARA FACILITAR O USO DAS FUNÇÕES C++
+using namespace std;
+
+//NO DE MEMORIA
+typedef struct
+{
+   char nome[30];
+   int score=0;
+} jogador;
+
+//ESTRUTURA DINAMICA PILHA
+typedef struct No
+{
+     jogador p;
+     struct No *ant, *prox;
+} ListaDE;
+
+//VARIAVEL QUE ARMAZENA O NOME DO USUARIO DIGITADO NA TELA INICIAL
+string nome;
+
+//converter a string nome para ponteiro de char, só assim é possivel escrever na tela
+const char * c = nome.c_str();
+
+//VARIAVEIS GLOBAIS
+int score=0, flag=1, tela=0;
+//armazena o score em forma de string para visualizar na tela
+char textoScore[255];
+//velocidade do objeto
+int velocidade = 10;
+//ponteiro "*l" para a manipulação da estrutura dinâmica
+ListaDE *l=NULL;
+//funções das estruturas dinamicas, para inserir e para percorrer
+//Estrutura de dados do tipo PILHA
+ListaDE* insereInicio (ListaDE *l);
+void percorre (ListaDE *l);
+
+//dimensoes do inimigo
+GLfloat x1 = 100.0f;
+GLfloat y1 = 250.0f;
+GLsizei rsize = 50;
+
+// Vetor de translacao
+GLfloat xstep = 3.0f;
+GLfloat ystep = 3.0f;
+
+//TAMANHO DA JANELA
+GLfloat windowWidth;
+GLfloat windowHeight;
+
+//coordenadas DO PERSONAGEM
+GLfloat personX = 300.0f;
+GLfloat personY = 10.0f;
+GLfloat personComp = 50.0f;
+GLfloat personAlt = 25.0f;
+
+//variaveis para controlar a posição no ranking
+int rank1=300, rank2=300;
+
+void *font = GLUT_BITMAP_TIMES_ROMAN_24;
+
+// A = objeto inimigo B = objeto personagem
+//FUNÇÃO BOOLEANA QUE VERIFICA SE HOUVE OU NÃO A COLISÃO, RETORNA TRUE OU FALSE
+bool colisao(float Ax, float Ay, float Acomp, float Aalt, float Bx, float By, float Bcomp, float Balt)
+{
+    if(Ay + Aalt <= By) return false;
+    else if(Ay >= By + Balt) return false;
+    else if(Ax + Acomp <= Bx) return false;
+    else if(Ax >= Bx + Bcomp) return false;
+    //else if(Ay > Balt + Bcomp) return false;
+    //else if(Ay > By + Bcomp) return false;
+
+    return true; //houve colisao
+
+}
+
+//funcao printa strings na tela
+void textoNaTela(int x, int y, const char *teste)
+{
+  int len, i;
+  glRasterPos2f(x, y);
+  len = (int) strlen(teste);
+  for (i = 0; i < len; i++) {
+    glutBitmapCharacter(font, teste[i]);
+  }
+}
+//SE O USUÁRIO PERDER, SEGUE PARA A TELA DE GAME OVER
+void telaGameOver(void)
+{
+     tela=4; //DEFINE A TELA COMO TELA 4
+     glMatrixMode(GL_MODELVIEW); //INCIA O MODO DE VISUALIAÇÃO EM MATRIZ
+     glLoadIdentity();
+     glClear(GL_COLOR_BUFFER_BIT); //CHAMA O BUFFER DE CORES
+     glColor3f(1.0f, 0.0f, 0.0f); //DEFINE A COR COMO "VERDE" padrão RGB
+     textoNaTela(230, 400, "GAME OVER!"); //printa as mensagens de final de jogo
+     glColor3f(0.0f, 0.0f, 1.0f);
+     textoNaTela(220, 250, "Player:");
+     textoNaTela(325, 250, c); //printa o nome do usuario
+     textoNaTela(220, 140, textoScore); //printa o score
+     glColor3f(1.0f, 1.0f, 1.0f);
+     textoNaTela(100, 70, "Pressione BACKSPACE para reiniciar o jogo");
+     textoNaTela(220, 40, "Pressione ESC sair");
+     //SE FLAG FOR =1 CHAMA A FUNÇÃO PARA INSERIR O NOME E O SCORE DINAMICAMENTE NA MEMÓRIA
+     if(flag==1){
+        l = insereInicio(l);
+        //percorre(l);
+        flag=0;
+     }
+     glutSwapBuffers();
+}
+
+//funcao desenha os objetos principais
+void Desenha(void)
+{
+     tela=3;
+     glMatrixMode(GL_MODELVIEW);
+     glLoadIdentity();
+
+     glClear(GL_COLOR_BUFFER_BIT);
+     glColor3f(0.0f, 0.0f, 1.0f);
+     textoNaTela(5, 450, "Player:");
+     textoNaTela(80, 450, c);
+     textoNaTela(5, 400, textoScore);
+     glColor3f(1.0f, 0.0f, 0.0f);
+
+     //OBJETO
+     glBegin(GL_QUADS);
+               glVertex2i(x1,y1+rsize);
+               glVertex2i(x1,y1);
+               glColor3f(0.0f, 0.0f, 1.0f);
+               glVertex2i(x1+rsize,y1);
+               glVertex2i(x1+rsize,y1+rsize);
+     glEnd();
+
+    //Personagem
+     glBegin(GL_QUADS);
+               glVertex2f(personX,personY + personAlt);
+               glVertex2f(personX,personY);
+               glColor3f(1.0f, 0.0f, 1.0f);
+               glVertex2f(personX + personComp,personY);
+               glVertex2f(personX + personComp, personY + personAlt);
+
+            glEnd();
+
+     glutSwapBuffers();
+    // printf("TELA= %d", tela);
+}
+
+//FUNÇÃO DA TELA INICIAL
+void telaInicial(void)
+{
+     tela=1; //variável para mostrar qual tela o usuário está
+     nome= {""}; //zera a matriz de dados caso haja uma reset do jogo pelo usuario
+     glMatrixMode(GL_MODELVIEW); //INICIA A MATRIZ DA PRIMEIRA TELA
+     glLoadIdentity();
+     glClear(GL_COLOR_BUFFER_BIT); //INCIA O BUFFER DE CORES
+     glColor3f(0.0f, 1.0f, 0.0f); //DEFINE A COR DA FONTE DA TELA INICIAL
+     textoNaTela(40, 450, "Desenvolvido por Jeferson & Thiago - All rights reserved");
+     textoNaTela(150, 300, "Bem-vindo ao PONG GAME"); // MENSAGENS DE BOAS VINDAS
+     glColor3f(1.0f, 1.0f, 1.0f);
+     textoNaTela(150, 150, "Para iniciar o jogo pressione 1 ");
+     textoNaTela(150, 100, "Para ver o Ranking pressione 2");
+     glutSwapBuffers(); //FECHA O BUFFER
+     printf("\n\nTELAINICIAL"); //PRINTA NO TERMINAL TODA VEZ QUE O USUÁRIO VOLTA A TELA INICIAL PARA CONTROLE DE DESENVOLVIMENTO
+}
+
+//TELA PARA MOSTRAR HISTORICO DE PONTUAÇÕES ALOCADAS DINAMICAMENTE
+void telaRanking(void)
+{
+     tela=5; //define qual tela o usuario está
+     glMatrixMode(GL_MODELVIEW); //função que inicia a matriz da tela;
+     glLoadIdentity();
+     glClear(GL_COLOR_BUFFER_BIT); //função que inicia o buffer de cores
+     glColor3f(0.0f, 1.0f, 0.0f); // função que define a cor da fonte
+     textoNaTela(150, 450, "RANKING DOS JOGADORES");
+     textoNaTela(100, 350, "PLAYER");
+     textoNaTela(450, 350, "SCORE");
+     percorre(l);
+     //textoNaTela(100, 250, c);
+     //textoNaTela(450, 250, textoScore);
+     glColor3f(1.0f, 1.0f, 1.0f);
+     textoNaTela(80, 50, "Pressione BACKSPACE para voltar a tela incial..."); //volta a tela inicial
+
+     glutSwapBuffers();
+}
+
+//funcao da logica do inimigo para mudar direçao ao COLIDIR e tbm para não sair do quadrante da tela
+void Timer(int value)
+{
+
+    // Muda a direção quando chega na borda esquerda ou direita
+      if(x1 > windowWidth-rsize || x1 < 0)
+        {
+          xstep = -xstep;
+        }
+
+    // Muda a direção quando chega na borda superior ou inferior
+      if(y1 > windowHeight-rsize)
+        {
+          ystep = -ystep;
+        }
+
+    // Verificação de bordas.  Se a window for menor e o quadrado sair do volume de visualização
+      if(x1 > windowWidth-rsize)
+        {
+          x1 = windowWidth-rsize-1;
+        }
+
+      if(y1 > windowHeight-rsize)
+        {
+         y1 = windowHeight-rsize-1;
+        }
+         sprintf (textoScore,"SCORE : %.3d", score);
+
+      // Se a colisao acontecer, inverta a direçao do inimigo e aumenta 1 no score
+      if(colisao(x1, y1, rsize, rsize, personX, personY, personComp, personAlt) == true && y1 > 32)
+        {
+            //Sleep(10);
+            ystep = -ystep;
+            score ++;
+            sprintf (textoScore,"SCORE : %.3d", score);
+            if(score % 5 == 0)
+                {
+                    velocidade--;
+                }
+        }
+
+      if(personX < 0)
+        {
+            personX = 0;
+        }
+        else if(personX + personComp > 640)
+        {
+            personX = 640 - personComp;
+        }
+        else if(y1 < personAlt)
+        {
+            //ystep = -ystep;
+            glutDisplayFunc(telaGameOver); //CASO NENHUMA DAS FUNÇÕES ANTERIORES DEREM TRUE, O JOGO DA GAME OVER
+
+        }
+
+      x1 += xstep;
+      y1 += ystep;
+
+      glutPostRedisplay();
+      if(tela==3)
+      glutTimerFunc(velocidade,Timer, 0);
+
+
+}
+//função que permite aumentar e diminuir o tamanho da tela
+void AlteraTamanhoJanela(GLsizei w, GLsizei h)
+{
+     printf("\n w: %d      h: %d ", w, h); //printa no terminal o tamanho da tela
+     glViewport(0, 0, w, h); //define o tamanho da viewport definida na are de globais
+     glMatrixMode(GL_PROJECTION); // inicia uma matriz de projeção
+     glLoadIdentity();
+     glClearColor(0.0f, 0.0f, 0.0f, 1.0f); //define a cor da janela
+     windowWidth = w; //largura da janela
+     windowHeight = h; //altura da janela
+     gluOrtho2D(0.0f, windowWidth, 0.0f, windowHeight);
+}
+
+//TELA INICIAL QUE DA AS INTRUÇÕES DE JOGO AO USUÁRIO E ALOCA O NOME NA VARIAVEL C QUE POSTERIORMENTE
+//SERÁ ALOCADA NA ESTRUTURA DINAMICA
+void insiraNome(void)
+{
+    tela=2; //TELA QUE O USUARIO ESTA
+    glClear( GL_COLOR_BUFFER_BIT ); //INCIA O BUFFER DE CORES
+    glMatrixMode( GL_PROJECTION ); //INCIA A MATRIZ DE PROJEÇÃO
+    glLoadIdentity(); //carrega a mariz indentidade
+    double w = glutGet( GLUT_WINDOW_WIDTH );
+    double h = glutGet( GLUT_WINDOW_HEIGHT );
+    glOrtho( 0, w, 0, h, -1, 1 );
+    glColor3f(0.0f, 1.0f, 0.0f); // função que define a cor da fonte
+
+    //inicia a projeção ao usuario das informações e abre o buffer para que o usuário digite seu nome
+    glMatrixMode( GL_MODELVIEW );
+    glLoadIdentity();
+        ostringstream oss;
+        oss << "Digite seu nome e pressione enter!\n\n" << endl; //função c++, para salvar uma string, ao pressionar a tecla enter, é colocado o terminador de string "/0"
+        oss << ( "Jogador" ) << ": " << nome;
+        oss << "\n\n\n\nInstruções:" << endl;//instruções de jogo
+        oss << "\nUtilize as teclas \n" << endl;//instruções de jogo
+        oss << " '<' Para mover o objeto para esquerda\n" << endl; //instruções de jogo
+        oss << " '>' Para mover o objeto para a direita\n\n\n" << endl;//instruções de jogo
+        textoNaTela(100, 20, "Pressione BACKSPACE para voltar a tela incial"); //volta a tela inicial
+        void* font = GLUT_BITMAP_TIMES_ROMAN_24; //define a fonte utilizada
+        const int fontHeight = glutBitmapHeight( font ); //define o tamanho da fonte utilizada
+        glRasterPos2i( 150, h - ( fontHeight * ( 1 ) ) );
+        glutBitmapString( font, (const unsigned char*)( oss.str().c_str() ) );
+
+    glutSwapBuffers();
+}
+
+//FUNÇÃO DE TECLADO PARA CONTROLAR O JOGO
+void keyboard( unsigned char key, int x, int y )
+{
+    //tecla 1 para começar o jogo
+    if( key == 49 && tela==1)
+    {
+        glutDisplayFunc(insiraNome);
+    }
+    //tecla 2 para exibir o ranking
+    else if( key == 50 && tela == 1)
+    {
+        glutDisplayFunc(telaRanking);
+    }
+    //voltar na tela inicial
+    else if(key == 8 && tela != 3)
+    {
+        // backspace
+        glutDisplayFunc(telaInicial);
+        //printf("BACKSPACE");
+    }
+    //APÓS O USUÁRIO INSERIR O NOME E TECLAR 'ENTER' O JOGO INCIA
+    else if(key == 13 && tela==2)
+    {
+        //tecla enter coloca o terminador de strings e reseta as variáveis
+        nome = nome + '\0';
+        //posição do personagem
+        personX = 300.0f;
+        personY = 10.0f;
+        personComp = 50.0f;
+        personAlt = 25.0f;
+        //posição do inimigo
+        x1 = 100.0f;
+        y1 = 250.0f;
+        rsize = 50;
+        //variavel de pontuação do usuario
+        score=0;
+        //variável de marcação para alocar o nó dinamicamente na memória
+        flag=1;
+        //velocidade do objeto inicial
+        velocidade = 10;
+        //tela que o usúario esta, tela de jogo
+        tela=3;
+        //vetor de translação retorna ao seu estado incial
+        xstep = 3.0f;
+        ystep = 3.0f;
+        //chama a função de desenha para desenhar os objetos natela
+        glutDisplayFunc(Desenha);
+        //se a tela for = 3, incia a função timer para rodar o jogo
+        if(tela==3)
+         glutTimerFunc(velocidade, Timer, 0);
+
+    }
+    //CONTROLE DO PERSONAGEM PARA A ESQUERDA
+    else if(key == 44)
+    {
+        //tecla <
+        personX -= 20;
+    }
+    //CONTROLE DO PERSONAGEM PARA A DIREITA
+    else if(key == 46)
+    {
+        //tecla >
+        personX += 20;
+    }
+    //TECLA ESC QUE ABORTA O CÓDIGO A QUALQUER MOMENTO
+    else if(key == 27)
+    {
+        //tecla esc
+        exit(1);
+    }
+    //habilita a entrada de caracteres
+    else if(tela==2)
+    {
+        //inserir nome
+        nome.push_back((char) key);
+    }
+    else {
+
+        printf("\ntecla invalida");
+    }
+
+    glutPostRedisplay();
+}
+//função para criar um nó de memória, chamada na tela de GAME OVER
+ListaDE* insereInicio (ListaDE *l)
+{
+    //cria um novo nó na memória
+    ListaDE  *novo;
+    //aloca um espaço na memória e retorna um ponteiro para a variável nó
+    novo = (ListaDE *) malloc (sizeof (ListaDE));
+    //salva o nome digitado na tela 2, armazenado na variavel C, agora no campo NOME, do nó
+    strcpy(novo->p.nome, c);
+    //salva o SCORE DO USUÁRIO NO NOVO NÓ
+    novo->p.score = score;
+    //PRINTA NO TERMINAL PARA MOSTRAR QUE ESTA FUNCIONANDO
+    printf("Nome: %s", novo->p.nome);
+    printf("Score: %d", novo->p.score);
+    novo->prox = l;
+    novo->ant = NULL;
+    if (l!=NULL)
+        l->ant = novo;
+     l = novo;
+    return l;
+}
+//FUNÇÃO PARA PERCORRER A ESTRUTURA DINAMICA
+void percorre (ListaDE *l)
+{
+    //printf("cont = %d", cont2);
+    if (l == NULL)
+        return;
+
+    else
+    {
+        printf("\nNome: %s - Score: %d \n",l->p.nome, l->p.score);
+        percorre(l->prox);
+        sprintf (textoScore,"SCORE : %.3d", l->p.score);
+        textoNaTela(100, rank1, l->p.nome);
+        textoNaTela(450, rank2, textoScore);
+
+    }
+    rank1=rank1-20;
+    rank2=rank2-20;
+
+}
+
+int main(int argc, char** argv)
+{
+     glutInit(&argc,argv);
+     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+     glutInitWindowSize(640,480);
+     glutInitWindowPosition(10,10);
+     glutCreateWindow("Pong Game");
+     glutDisplayFunc(telaInicial);
+     glutReshapeFunc(AlteraTamanhoJanela);
+     //glutTimerFunc(velocidade, Timer, 0);
+     glutKeyboardFunc(keyboard);
+     glutMainLoop();
+
+}
+
